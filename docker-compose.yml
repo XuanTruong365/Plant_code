@@ -1,0 +1,62 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .                         # build từ root để lấy được .docker/Dockerfile
+      dockerfile: ./.docker/Dockerfile
+    image: plantstore-app:latest
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      # 👉 chỉ mount thư mục src vào container (hot-reload code)
+      - ./src:/var/www/html
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      CONTAINER_ROLE: app
+    command: ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisor.conf"]
+    networks:
+      - backend
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./.docker/Dockerfile.nginx
+    restart: always
+    tty: true
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      # 👉 mount src làm read-only cho nginx
+      - ./src:/var/www/html:ro,cached
+      - ./.docker/conf/nginx.conf.template:/etc/nginx/templates/default.conf.template
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:-mydev.local}
+    depends_on:
+      - app
+    networks:
+      - backend
+
+  mysql:
+    image: mysql:8.1
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "${DB_PORT_FW:-3306}:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-plant_db}
+      MYSQL_USER: ${DB_USERNAME:-user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-pass}
+      MYSQL_ROOT_PASSWORD: "root*password"
+    volumes:
+      - mysqldb:/var/lib/mysql
+    networks:
+      - backend
+
+volumes:
+  mysqldb:
+    driver: local
+
+networks:
+  backend:
+    driver: bridge
