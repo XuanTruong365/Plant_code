@@ -1,34 +1,45 @@
 version: '3.9'
 
 services:
+  # ------------------------
+  # PHP + Laravel Application
+  # ------------------------
   app:
     build:
-      context: .                         # build từ root để lấy được .docker/Dockerfile
-      dockerfile: ./.docker/Dockerfile
+      context: .
+      dockerfile: ./.docker/Dockerfile         # đã tối ưu multi-stage + alpine
+      args:
+        APP_ENV: ${APP_ENV:-local}
     image: plantstore-app:latest
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
-      # 👉 chỉ mount thư mục src vào container (hot-reload code)
+      # 👉 DEV: mount code để hot reload
       - ./src:/var/www/html
+      # 👉 nếu production => bỏ dòng trên và COPY code trong Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-local}
       CONTAINER_ROLE: app
-    command: ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisor.conf"]
+    command: ["php-fpm"]                        # chỉ chạy php-fpm (supervisord dùng riêng nếu cần)
     networks:
       - backend
+    depends_on:
+      - redis
 
+  # ------------------------
+  # Nginx Web Server
+  # ------------------------
   nginx:
     build:
       context: .
-      dockerfile: ./.docker/Dockerfile.nginx
-    restart: always
-    tty: true
+      dockerfile: ./.docker/Dockerfile.nginx   # nginx:alpine + config template
+    restart: unless-stopped
     ports:
       - "${HTTP_PORT:-8080}:80"
     volumes:
-      # 👉 mount src làm read-only cho nginx
-      - ./src:/var/www/html:ro,cached
+      # 👉 DEV: mount code read-only
+      - ./src:/var/www/html:ro
+      # 👉 template config (dev có thể override)
       - ./.docker/conf/nginx.conf.template:/etc/nginx/templates/default.conf.template
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME:-mydev.local}
@@ -37,10 +48,12 @@ services:
     networks:
       - backend
 
+  # ------------------------
+  # Database (MySQL)
+  # ------------------------
   mysql:
-    image: mysql:8.1
+    image: mysql:8.1-oracle
     restart: unless-stopped
-    tty: true
     ports:
       - "${DB_PORT_FW:-3306}:3306"
     environment:
@@ -53,9 +66,16 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"            # optional: mở ra ngoài cho debug
+    networks:
+      - backend
+
 volumes:
   mysqldb:
-    driver: local
 
 networks:
   backend:

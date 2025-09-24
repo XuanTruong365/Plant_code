@@ -1,36 +1,50 @@
-FROM php:8.2-fpm
+# -------------------------------
+# 1. Base image
+# -------------------------------
+FROM php:8.2-fpm-alpine AS base
 
-RUN apt-get update && apt-get install -y \
-    libc-dev libmagickwand-dev libxml2-dev libcurl4-openssl-dev \
-    libonig-dev unzip libzip-dev libpng-dev libjpeg-dev imagemagick supervisor \
-    --no-install-recommends \
-    && docker-php-ext-configure gd --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd pdo pdo_mysql xml mbstring curl zip \
-    && docker-php-ext-enable gd \
-    && pecl install imagick \
-    && docker-php-ext-enable imagick
+# Cài PHP extensions + Redis extension (tối ưu, xóa build deps sau khi build)
+RUN apk add --no-cache \
+        bash curl git unzip \
+        icu-libs libzip \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS icu-dev libzip-dev oniguruma-dev \
+    && docker-php-ext-install pdo_mysql mbstring zip bcmath intl opcache \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps
 
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# -------------------------------
+# 2. Composer stage
+# -------------------------------
+FROM composer:2.7 AS vendor
+WORKDIR /app
+COPY src/composer.json src/composer.lock* ./
+RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader
 
-RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash - \
-    && apt-get install -y nodejs
-
+# -------------------------------
+# 3. Final app stage
+# -------------------------------
+FROM base AS app
 WORKDIR /var/www/html
 
-# 👉 Chỉ copy source Laravel trong thư mục src
-COPY src/ /var/www/html
+# Copy vendor từ stage trước
+COPY --from=vendor /app/vendor ./vendor
 
-# Copy custom php.ini
-COPY .docker/conf/php.ini /usr/local/etc/php/
+# Copy toàn bộ source code
+COPY src/ .
 
-# Cài composer dependencies
-RUN composer install --no-ansi --no-interaction --no-progress --no-scripts --optimize-autoloader
+# PHP ini
+COPY .docker/conf/php.ini /usr/local/etc/php/conf.d/custom.ini
 
-# Copy supervisor config
-COPY .docker/conf/supervisor.conf /etc/supervisor/conf.d/
+# Chown chmod chuẩn
+RUN mkdir -p bootstrap/cache storage \
+ && chown -R www-data:www-data storage bootstrap/cache \
+ && chmod -R ug+rwx storage bootstrap/cache
 
-EXPOSE 9000
-
+# Entrypoint script
 COPY .docker/entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+CMD ["php-fpm"]
 ENTRYPOINT ["entrypoint.sh"]
