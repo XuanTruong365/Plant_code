@@ -5,53 +5,49 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens; // nếu dùng API Token
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable, SoftDeletes;
 
-    // ⚡ UUID setup
-    public $incrementing = false;
     protected $keyType = 'string';
+    public $incrementing = false;
 
-    protected $fillable = [
-        'id', 'name', 'email', 'password', 'phone', 'avatar', 'status'
-    ];
-
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
-
-    protected $casts = [
-        'email_verified_at' => 'datetime',
-    ];
-
-    // ⚡ Auto-generate UUID khi tạo mới
-    protected static function boot()
+    protected static function booted()
     {
-        parent::boot();
         static::creating(function ($model) {
-            if (empty($model->{$model->getKeyName()})) {
-                $model->{$model->getKeyName()} = (string) \Illuminate\Support\Str::uuid();
-            }
+            if(!$model->id) $model->id = (string) Str::uuid();
         });
     }
 
-    public function addresses()
-    {
-//        return $this->hasMany(UserAddress::class);
+    protected $fillable = [
+        'name','email','password','phone','avatar','status','role'
+    ];
+
+    protected $hidden = ['password'];
+
+    // Relations
+    public function addresses() {
+        return $this->hasMany(UserAddress::class);
     }
 
-    public function orders()
-    {
-//        return $this->hasMany(Order::class);
+    public function orders() {
+        return $this->hasMany(Order::class);
     }
 
-    public function reviews()
+    public function coupons() {
+        return $this->belongsToMany(Coupon::class,'coupon_user');
+    }
+
+    public function activityLogs() {
+        return $this->hasMany(ActivityLog::class);
+    }
+
+    public function blogs()
     {
-//        return $this->hasMany(Review::class);
+        return $this->hasMany(Blog::class, 'created_by');
     }
 
 }

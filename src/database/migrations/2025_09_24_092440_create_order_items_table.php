@@ -20,7 +20,7 @@ class CreateOrderItemsTable extends Migration
             $table->uuid('variant_id')->nullable();
             $table->decimal('price', 12, 2);
             $table->unsignedInteger('quantity');
-            $table->decimal('subtotal', 12, 2);
+            $table->decimal('subtotal',15,2)->default(0);
             $table->timestamps();
 
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');

@@ -32,6 +32,7 @@ class CreateOrdersTable extends Migration
             $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
             $table->foreign('shipping_address_id')
                 ->references('id')->on('user_addresses')->onDelete('set null');
+            $table->softDeletes();
         });
     }
 
