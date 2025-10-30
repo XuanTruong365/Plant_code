@@ -7,10 +7,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     protected $keyType = 'string';
     public $incrementing = false;
@@ -49,5 +50,19 @@ class User extends Authenticatable
     {
         return $this->hasMany(Blog::class, 'created_by');
     }
+
+    public function getAvatarAttribute($value)
+    {
+        if (!$value) {
+            return asset('images/default-avatar.png');
+        }
+
+        if (preg_match('/^http/', $value)) {
+            return $value;
+        }
+
+        return asset('storage/' . $value);
+    }
+
 
 }
